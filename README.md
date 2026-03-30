@@ -102,7 +102,7 @@ python server.py  # Runs on port 8001
 
 **Default Credentials:**
 - **Username**: `SRayka`
-- **Password**: `123456`
+- **Password**: `User`
 
 *(Frontend-only authentication with localStorage persistence)*
 
