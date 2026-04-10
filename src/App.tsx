@@ -438,8 +438,15 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isRoadsDetailView, setIsRoadsDetailView] = useState(false);
+  const [resetRoadsView, setResetRoadsView] = useState(0);
 
   const isDetailView = !!selectedProject || !!activeCategory || isRoadsDetailView;
+
+  const handleGlobalBack = () => {
+    setSelectedProject(null);
+    setActiveCategory(null);
+    setResetRoadsView(prev => prev + 1);
+  };
 
   const divisions = activeTab === 'roads' 
     ? ['Amreli', 'Bhavnagar', 'Junagadh', 'Botad', 'Porbandar', 'Gir Somnath']
@@ -596,9 +603,18 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center py-4 gap-4">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 p-2 rounded-lg shrink-0">
-                <TrendingUp className="text-white" size={20} />
-              </div>
+              {isDetailView ? (
+                <button 
+                  onClick={handleGlobalBack}
+                  className="bg-indigo-600 p-2 rounded-lg shrink-0 hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="text-white" size={20} />
+                </button>
+              ) : (
+                <div className="bg-indigo-600 p-2 rounded-lg shrink-0">
+                  <TrendingUp className="text-white" size={20} />
+                </div>
+              )}
               <div>
                 <h1 className="text-lg font-bold text-slate-900 leading-tight">(R&B) Circle No. 2 Dashboard</h1>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Superintending Engineer, Rajkot</p>
@@ -956,7 +972,7 @@ export default function App() {
                 </div>
               </>
             ) : activeTab === 'roads' ? (
-              <RoadsDashboard data={rawNetworkData} selectedDivision={selectedDivision} onDetailViewChange={setIsRoadsDetailView} />
+              <RoadsDashboard data={rawNetworkData} selectedDivision={selectedDivision} onDetailViewChange={setIsRoadsDetailView} resetViewTrigger={resetRoadsView} />
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
