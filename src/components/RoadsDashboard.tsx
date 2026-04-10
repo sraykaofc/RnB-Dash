@@ -19,6 +19,7 @@ interface RoadsDashboardProps {
   data: any[];
   selectedDivision: string;
   onDetailViewChange?: (isDetail: boolean) => void;
+  resetViewTrigger?: number;
 }
 
 const StatCard = ({ title, value, icon: Icon, color, description, onClick, extra }: any) => (
@@ -157,10 +158,18 @@ const RoadDetailsView = ({ road, onBack }: { road: any, onBack: () => void }) =>
   );
 };
 
-export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDivision, onDetailViewChange }) => {
+export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDivision, onDetailViewChange, resetViewTrigger }) => {
   const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | null>(null);
   const [selectedRoad, setSelectedRoad] = useState<any | null>(null);
   const [roadSearchTerm, setRoadSearchTerm] = useState('');
+
+  React.useEffect(() => {
+    if (resetViewTrigger && resetViewTrigger > 0) {
+      setActiveDetailView(null);
+      setSelectedRoad(null);
+      setRoadSearchTerm('');
+    }
+  }, [resetViewTrigger]);
 
   React.useEffect(() => {
     if (onDetailViewChange) {
