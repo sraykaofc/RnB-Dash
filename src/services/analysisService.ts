@@ -23,6 +23,7 @@ export interface ProjectData {
 }
 
 export interface DashboardStats {
+  allProjects: ProjectData[];
   redAlerts: ProjectData[];
   executionDelays: ProjectData[];
   highPriority: ProjectData[];
@@ -365,6 +366,7 @@ export function analyzeProjects(data: any[]): DashboardStats {
   });
 
   return {
+    allProjects: projects,
     redAlerts,
     executionDelays,
     highPriority,
