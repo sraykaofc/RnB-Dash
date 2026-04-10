@@ -437,8 +437,22 @@ export default function App() {
   const [sheetUrl, setSheetUrl] = useState('https://docs.google.com/spreadsheets/d/1fvb5M7f-rajXCgPF7ntDiQaeD6mJwq_5jdo6TL_NsKQ/edit?gid=0#gid=0');
   const [isLoading, setIsLoading] = useState(false);
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
+  const [isRoadsDetailView, setIsRoadsDetailView] = useState(false);
 
-  const divisions = ['Amreli', 'Bhavnagar', 'Junagadh', 'Botad', 'Porbandar', 'Veraval'];
+  const isDetailView = !!selectedProject || !!activeCategory || isRoadsDetailView;
+
+  const divisions = activeTab === 'roads' 
+    ? ['Amreli', 'Bhavnagar', 'Junagadh', 'Botad', 'Porbandar', 'Gir Somnath']
+    : ['Amreli', 'Bhavnagar', 'Junagadh', 'Botad', 'Porbandar', 'Veraval'];
+
+  const handleTabChange = (tab: 'dashboard' | 'table' | 'roads') => {
+    if (tab === 'roads' && selectedDivision === 'Veraval') {
+      setSelectedDivision('Gir Somnath');
+    } else if (tab !== 'roads' && selectedDivision === 'Gir Somnath') {
+      setSelectedDivision('Veraval');
+    }
+    setActiveTab(tab);
+  };
 
   const filteredRawData = useMemo(() => {
     if (selectedDivision === 'RC2') return rawData;
@@ -563,22 +577,26 @@ export default function App() {
   }, [stats]);
 
   const filteredProjects = useMemo(() => {
-    if (!filteredRawData) return [];
-    return filteredRawData.filter(row => 
-      Object.values(row).some(val => 
-        String(val).toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [filteredRawData, searchTerm]);
+    if (!stats || !stats.allProjects) return [];
+    return stats.allProjects.filter(project => {
+      const searchStr = searchTerm.toLowerCase();
+      return (
+        project.name.toLowerCase().includes(searchStr) ||
+        project.district.toLowerCase().includes(searchStr) ||
+        project.status.toLowerCase().includes(searchStr) ||
+        getDetailedStatus(project).toLowerCase().includes(searchStr)
+      );
+    });
+  }, [stats, searchTerm]);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center py-4 gap-4">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 p-2 rounded-lg">
+              <div className="bg-indigo-600 p-2 rounded-lg shrink-0">
                 <TrendingUp className="text-white" size={20} />
               </div>
               <div>
@@ -587,19 +605,22 @@ export default function App() {
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
-              <div className="hidden md:flex bg-slate-100 p-1 rounded-lg">
+            <div className={cn(
+              "items-center gap-2 sm:gap-4 overflow-x-auto w-full md:w-auto pb-1 md:pb-0",
+              isDetailView ? "hidden md:flex" : "flex"
+            )}>
+              <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
                 <button 
-                  onClick={() => setActiveTab('dashboard')}
+                  onClick={() => handleTabChange('dashboard')}
                   className={cn(
                     "px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2",
                     activeTab === 'dashboard' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
                   )}
                 >
-                  <LayoutDashboard size={14} /> Dashboard
+                  <LayoutDashboard size={14} /> Projects
                 </button>
                 <button 
-                  onClick={() => setActiveTab('table')}
+                  onClick={() => handleTabChange('table')}
                   className={cn(
                     "px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2",
                     activeTab === 'table' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
@@ -608,7 +629,7 @@ export default function App() {
                   <TableIcon size={14} /> Data Table
                 </button>
                 <button 
-                  onClick={() => setActiveTab('roads')}
+                  onClick={() => handleTabChange('roads')}
                   className={cn(
                     "px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2",
                     activeTab === 'roads' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
@@ -621,7 +642,7 @@ export default function App() {
               {rawData.length > 0 && (
                 <button 
                   onClick={() => { setRawData([]); }}
-                  className="text-xs font-semibold text-red-600 hover:text-red-700 px-3 py-2 border border-red-200 rounded-lg bg-red-50"
+                  className="text-xs font-semibold text-red-600 hover:text-red-700 px-3 py-2 border border-red-200 rounded-lg bg-red-50 shrink-0"
                 >
                   Reset Data
                 </button>
@@ -935,7 +956,7 @@ export default function App() {
                 </div>
               </>
             ) : activeTab === 'roads' ? (
-              <RoadsDashboard data={rawNetworkData} selectedDivision={selectedDivision} />
+              <RoadsDashboard data={rawNetworkData} selectedDivision={selectedDivision} onDetailViewChange={setIsRoadsDetailView} />
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -970,29 +991,29 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {filteredProjects.map((row, i) => (
-                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                      {filteredProjects.map((project, i) => (
+                        <tr key={i} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => setSelectedProject(project)}>
                           <td className="px-6 py-4">
-                            <p className="text-sm font-semibold text-slate-800">{row['Work Name'] || row['Project Name'] || row['Name'] || 'N/A'}</p>
+                            <p className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">{project.name}</p>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="text-xs text-slate-500">{row['Division'] || row['District'] || 'N/A'}</span>
+                            <span className="text-xs text-slate-500">{project.district}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md uppercase">
-                              {row['Proposal Status'] || row['Status'] || 'N/A'}
+                              {getDetailedStatus(project)}
                             </span>
                           </td>
                           <td className="px-6 py-4">
                             <span className={cn(
                               "px-2 py-1 text-[10px] font-bold rounded-md",
-                              (row['BE Status'] === 'G' || row['Location'] === 'G' || row['Proposal Status'] === 'G') ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"
+                              project.currentLocation === 'G' ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"
                             )}>
-                              {row['BE Status'] || row['Location'] || row['Current Location'] || 'N/A'}
+                              {project.currentLocation || 'N/A'}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <p className="text-sm font-mono font-bold text-slate-700">{row['Approved Amount'] || row['Column Y'] || '0.00'}</p>
+                            <p className="text-sm font-mono font-bold text-slate-700">{project.approvedAmount ? project.approvedAmount.toFixed(2) : '0.00'}</p>
                           </td>
                         </tr>
                       ))}
