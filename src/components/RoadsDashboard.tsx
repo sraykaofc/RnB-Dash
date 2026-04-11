@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search } from 'lucide-react';
+import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map, Navigation, Signpost, Milestone, Compass, Car } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   BarChart, 
@@ -158,6 +158,85 @@ const RoadDetailsView = ({ road, onBack }: { road: any, onBack: () => void }) =>
   );
 };
 
+const CustomRoadCategoryChart = ({ data }: { data: any[] }) => {
+  const maxValue = Math.max(...data.map(d => d.value));
+
+  const getIcon = (name: string) => {
+    switch (name) {
+      case 'NH': return <Map size={24} className="text-blue-500" />;
+      case 'SH': return <Route size={24} className="text-orange-500" />;
+      case 'MDR': return <Navigation size={24} className="text-teal-700" />;
+      case 'ODR': return <Signpost size={24} className="text-amber-500" />;
+      case 'VR': return <Milestone size={24} className="text-emerald-600" />;
+      case 'CH': return <Compass size={24} className="text-purple-500" />;
+      case 'SHDP': return <Activity size={24} className="text-pink-500" />;
+      case 'BYPASS': return <Car size={24} className="text-green-500" />;
+      case 'SH OLD': return <MapPin size={24} className="text-rose-500" />;
+      default: return <Route size={24} className="text-slate-400" />;
+    }
+  };
+
+  const getPattern = (name: string) => {
+    switch (name) {
+      case 'MDR': return 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)';
+      case 'SH': return 'radial-gradient(circle, rgba(255,255,255,0.2) 2px, transparent 2px)';
+      case 'ODR': return 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)';
+      case 'VR': return 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent)';
+      default: return 'none';
+    }
+  };
+
+  const getBackgroundSize = (name: string) => {
+    switch (name) {
+      case 'SH': return '8px 8px';
+      case 'VR': return '20px 20px';
+      default: return 'auto';
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '400px' }}>
+      {/* Decorative background element */}
+      <div className="absolute right-0 top-0 bottom-0 w-32 opacity-10 pointer-events-none flex flex-col justify-between py-4">
+        <Route size={120} className="text-slate-900 -mr-10 transform rotate-12" />
+        <Construction size={80} className="text-slate-900 -mr-4 transform -rotate-12" />
+      </div>
+
+      <div className="space-y-4 relative z-10 py-2">
+        {data.map((item, idx) => (
+          <div key={idx} className="flex items-center gap-4 group">
+            <div className="w-40 sm:w-56 shrink-0 flex items-center justify-end gap-3 border-r-2 border-slate-300 pr-4 py-1 relative">
+              <div className="flex flex-col items-end text-right">
+                <span className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">{item.fullName}</span>
+                <span className="text-[10px] sm:text-xs font-bold text-slate-500">({item.name})</span>
+              </div>
+              <div className="shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                {getIcon(item.name)}
+              </div>
+            </div>
+            <div className="flex-1 flex items-center gap-3">
+              <div 
+                className="h-8 sm:h-10 rounded-r-md relative overflow-hidden transition-all duration-500 ease-out group-hover:opacity-90 shadow-sm" 
+                style={{ width: `${Math.max((item.value / maxValue) * 100, 2)}%`, backgroundColor: item.color }}
+              >
+                <div 
+                  className="absolute inset-0" 
+                  style={{ 
+                    backgroundImage: getPattern(item.name),
+                    backgroundSize: getBackgroundSize(item.name)
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent"></div>
+              </div>
+              <span className="text-sm sm:text-base font-bold text-slate-900 whitespace-nowrap">{item.value.toLocaleString()} KM</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDivision, onDetailViewChange, resetViewTrigger }) => {
   const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | null>(null);
   const [selectedRoad, setSelectedRoad] = useState<any | null>(null);
@@ -192,26 +271,49 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
     let totalNonDlp = 0;
     let totalWip = 0;
 
-    let shCount = 0;
-    let mdrCount = 0;
-    let odrCount = 0;
-    let vrCount = 0;
+    const categoryLengths: Record<string, number> = {
+      'SH': 0, 'MDR': 0, 'CH': 0, 'VR': 0, 'SHDP': 0, 'BYPASS': 0, 'NH': 0, 'ODR': 0, 'SH OLD': 0
+    };
 
     filteredData.forEach(row => {
       if (!row['Road Name with Chainages']) return;
       totalRoads++;
       
-      totalLength += parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0') || 0;
+      const length = parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0') || 0;
+      totalLength += length;
       totalDlp += parseFloat(row['DLP Length (In KM)'] || '0') || 0;
       totalNonDlp += parseFloat(row['Non DLP Length (In KM)'] || '0') || 0;
       totalWip += parseFloat(row['WIP Length (In KM)'] || '0') || 0;
 
-      const category = String(row['Road Category'] || '').toUpperCase();
-      if (category === 'SH') shCount++;
-      else if (category === 'MDR') mdrCount++;
-      else if (category === 'ODR') odrCount++;
-      else if (category === 'VR') vrCount++;
+      const category = String(row['Road Category'] || '').toUpperCase().trim();
+      if (categoryLengths[category] !== undefined) {
+        categoryLengths[category] += length;
+      } else if (category) {
+        categoryLengths[category] = (categoryLengths[category] || 0) + length;
+      }
     });
+
+    const CATEGORY_INFO: Record<string, { fullName: string, color: string }> = {
+      'MDR': { fullName: 'Major District Roads', color: '#1e5b6e' },
+      'SH': { fullName: 'State Highways', color: '#e05a33' },
+      'ODR': { fullName: 'Other District Roads', color: '#dcae53' },
+      'VR': { fullName: 'Village Roads', color: '#4a8fa3' },
+      'CH': { fullName: 'Coastal Highways', color: '#8b5cf6' },
+      'SHDP': { fullName: 'SHDP', color: '#ec4899' },
+      'BYPASS': { fullName: 'Bypass Roads', color: '#10b981' },
+      'NH': { fullName: 'National Highways', color: '#3b82f6' },
+      'SH OLD': { fullName: 'State Highways (Old)', color: '#f43f5e' }
+    };
+
+    const categories = Object.entries(categoryLengths)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        fullName: CATEGORY_INFO[name]?.fullName || name,
+        value: parseFloat(value.toFixed(2)),
+        color: CATEGORY_INFO[name]?.color || '#94a3b8'
+      }))
+      .sort((a, b) => b.value - a.value);
 
     return {
       totalRoads,
@@ -219,12 +321,7 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
       totalDlp: totalDlp.toFixed(2),
       totalNonDlp: totalNonDlp.toFixed(2),
       totalWip: totalWip.toFixed(2),
-      categories: [
-        { name: 'SH', value: shCount, color: '#3b82f6' },
-        { name: 'MDR', value: mdrCount, color: '#8b5cf6' },
-        { name: 'ODR', value: odrCount, color: '#f59e0b' },
-        { name: 'VR', value: vrCount, color: '#10b981' },
-      ].filter(c => c.value > 0),
+      categories,
       lengths: [
         { name: 'DLP', value: parseFloat(totalDlp.toFixed(2)), color: '#10b981' },
         { name: 'Non-DLP', value: parseFloat(totalNonDlp.toFixed(2)), color: '#f59e0b' },
@@ -448,36 +545,14 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Road Categories</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.categories} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }}
-                  width={60}
-                />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={32}>
-                  {stats.categories.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-[400px]">
+            <CustomRoadCategoryChart data={stats.categories} />
           </div>
         </section>
 
-        <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Length Distribution (KM)</h3>
           <div className="h-64 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
