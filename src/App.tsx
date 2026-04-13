@@ -141,6 +141,85 @@ const ProjectRow: React.FC<ProjectRowProps> = ({ project, type, onViewDetails })
   );
 };
 
+const CustomProjectStatusChart = ({ data, onCategoryClick }: { data: any[], onCategoryClick: (category: string) => void }) => {
+  const maxValue = Math.max(...data.map(d => d.value));
+
+  const getIcon = (id: string) => {
+    switch (id) {
+      case 'notStarted': return <Clock size={24} className="text-slate-400" />;
+      case 'inProgress': return <Construction size={24} className="text-blue-500" />;
+      case 'phyCompleted': return <FileText size={24} className="text-purple-500" />;
+      case 'completed': return <FileText size={24} className="text-emerald-500" />;
+      case 'stopped': return <AlertCircle size={24} className="text-red-500" />;
+      case 'totalProjects': return <LayoutDashboard size={24} className="text-indigo-500" />;
+      default: return <LayoutDashboard size={24} className="text-slate-400" />;
+    }
+  };
+
+  const getPattern = (id: string) => {
+    switch (id) {
+      case 'inProgress': return 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px)';
+      case 'phyCompleted': return 'radial-gradient(circle, rgba(255,255,255,0.2) 2px, transparent 2px)';
+      case 'stopped': return 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)';
+      case 'completed': return 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent)';
+      default: return 'none';
+    }
+  };
+
+  const getBackgroundSize = (id: string) => {
+    switch (id) {
+      case 'phyCompleted': return '8px 8px';
+      case 'completed': return '20px 20px';
+      default: return 'auto';
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '350px' }}>
+      {/* Decorative background element */}
+      <div className="absolute right-0 top-0 bottom-0 w-32 opacity-5 pointer-events-none flex flex-col justify-between py-4">
+        <LayoutDashboard size={100} className="text-slate-900 -mr-8 transform rotate-12" />
+        <TrendingUp size={80} className="text-slate-900 -mr-4 transform -rotate-12" />
+      </div>
+
+      <div className="space-y-4 relative z-10 py-2">
+        {data.map((item, idx) => (
+          <div 
+            key={idx} 
+            className="flex items-center gap-4 group cursor-pointer"
+            onClick={() => onCategoryClick(item.id)}
+          >
+            <div className="w-32 sm:w-40 shrink-0 flex items-center justify-end gap-3 border-r-2 border-slate-300 pr-4 py-1 relative">
+              <div className="flex flex-col items-end text-right">
+                <span className="text-xs sm:text-sm font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">{item.name}</span>
+              </div>
+              <div className="shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                {getIcon(item.id)}
+              </div>
+            </div>
+            <div className="flex-1 flex items-center gap-3">
+              <div 
+                className="h-8 sm:h-10 rounded-r-md relative overflow-hidden transition-all duration-500 ease-out group-hover:opacity-90 shadow-sm" 
+                style={{ width: `${Math.max((item.value / maxValue) * 100, 2)}%`, backgroundColor: item.color }}
+              >
+                <div 
+                  className="absolute inset-0" 
+                  style={{ 
+                    backgroundImage: getPattern(item.id),
+                    backgroundSize: getBackgroundSize(item.id)
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent"></div>
+              </div>
+              <span className="text-sm sm:text-base font-bold text-slate-900 whitespace-nowrap">{item.value.toLocaleString()}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // --- Main App ---
 
 const CategorySection = ({ category, stats, isFullView, onViewDetails, onExpand, onBack }: { category: string, stats: DashboardStats, isFullView?: boolean, onViewDetails: (p: ProjectData) => void, onExpand?: () => void, onBack?: () => void }) => {
@@ -298,6 +377,69 @@ const CategorySection = ({ category, stats, isFullView, onViewDetails, onExpand,
       expandMsg = 'priority routes';
       headerExtra = null;
       break;
+    case 'notStarted':
+      title = 'Not Started Projects';
+      icon = <Clock size={18} />;
+      colorClass = 'bg-slate-50/50';
+      items = stats.allProjects.filter(p => String(Object.values(p.raw)[28] || '').trim().toLowerCase() === 'not started');
+      type = 'pending';
+      emptyMsg = 'No not started projects.';
+      expandMsg = 'not started projects';
+      headerExtra = null;
+      break;
+    case 'inProgress':
+      title = 'In Progress Projects';
+      icon = <Construction size={18} />;
+      colorClass = 'bg-blue-50/50';
+      items = stats.allProjects.filter(p => String(Object.values(p.raw)[28] || '').trim().toLowerCase() === 'in progress');
+      type = 'execution';
+      emptyMsg = 'No in progress projects.';
+      expandMsg = 'in progress projects';
+      headerExtra = null;
+      break;
+    case 'phyCompleted':
+      title = 'Physically Completed Projects';
+      icon = <FileText size={18} />;
+      colorClass = 'bg-purple-50/50';
+      items = stats.allProjects.filter(p => {
+        const s = String(Object.values(p.raw)[28] || '').trim().toLowerCase();
+        return s === 'phy. completed' || s === 'phy completed';
+      });
+      type = 'aa';
+      emptyMsg = 'No physically completed projects.';
+      expandMsg = 'physically completed projects';
+      headerExtra = null;
+      break;
+    case 'completed':
+      title = 'Completed Projects';
+      icon = <FileText size={18} />;
+      colorClass = 'bg-emerald-50/50';
+      items = stats.allProjects.filter(p => String(Object.values(p.raw)[28] || '').trim().toLowerCase() === 'completed');
+      type = 'priority';
+      emptyMsg = 'No completed projects.';
+      expandMsg = 'completed projects';
+      headerExtra = null;
+      break;
+    case 'stopped':
+      title = 'Stopped Projects';
+      icon = <AlertCircle size={18} />;
+      colorClass = 'bg-red-50/50';
+      items = stats.allProjects.filter(p => String(Object.values(p.raw)[28] || '').trim().toLowerCase() === 'stopped');
+      type = 'red';
+      emptyMsg = 'No stopped projects.';
+      expandMsg = 'stopped projects';
+      headerExtra = null;
+      break;
+    case 'totalProjects':
+      title = 'Total Projects';
+      icon = <LayoutDashboard size={18} />;
+      colorClass = 'bg-indigo-50/50';
+      items = stats.allProjects;
+      type = 'execution';
+      emptyMsg = 'No projects available.';
+      expandMsg = 'projects';
+      headerExtra = null;
+      break;
     default:
       return null;
   }
@@ -428,6 +570,7 @@ const ProjectDetailsView = ({ project, onBack }: { project: ProjectData, onBack:
 export default function App() {
   const [rawData, setRawData] = useState<any[]>([]);
   const [rawNetworkData, setRawNetworkData] = useState<any[]>([]);
+  const [rawStructureData, setRawStructureData] = useState<any[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'table' | 'roads'>('dashboard');
   const [activeCategory, setActiveCategory] = useState<'red' | 'aa' | 'ts' | 'dtp' | 'tender' | 'ta' | 'loaWo' | 'execution' | 'priority' | null>(null);
@@ -551,7 +694,24 @@ export default function App() {
               if (networkResults.data && networkResults.data.length > 0) {
                 setRawNetworkData(networkResults.data);
               }
-              setIsLoading(false);
+              
+              // Now fetch Structure sheet
+              const structureUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Structure`;
+              Papa.parse(structureUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: (structureResults) => {
+                  if (structureResults.data && structureResults.data.length > 0) {
+                    setRawStructureData(structureResults.data);
+                  }
+                  setIsLoading(false);
+                },
+                error: (error) => {
+                  console.error("Error fetching Structure sheet:", error);
+                  setIsLoading(false);
+                }
+              });
             },
             error: (error) => {
               console.error("Error fetching Network sheet:", error);
@@ -574,12 +734,12 @@ export default function App() {
     if (!stats) return [];
     const totalStatusProjects = stats.projectStatus.notStarted + stats.projectStatus.inProgress + stats.projectStatus.phyCompleted + stats.projectStatus.completed + stats.projectStatus.stopped;
     return [
-      { name: 'Not Started', value: stats.projectStatus.notStarted, color: '#94a3b8' },
-      { name: 'In Progress', value: stats.projectStatus.inProgress, color: '#3b82f6' },
-      { name: 'Phy. Completed', value: stats.projectStatus.phyCompleted, color: '#8b5cf6' },
-      { name: 'Completed', value: stats.projectStatus.completed, color: '#10b981' },
-      { name: 'Stopped', value: stats.projectStatus.stopped, color: '#ef4444' },
-      { name: 'Total Projects', value: totalStatusProjects, color: '#6366f1' },
+      { id: 'notStarted', name: 'Not Started', value: stats.projectStatus.notStarted, color: '#94a3b8' },
+      { id: 'inProgress', name: 'In Progress', value: stats.projectStatus.inProgress, color: '#3b82f6' },
+      { id: 'phyCompleted', name: 'Phy. Completed', value: stats.projectStatus.phyCompleted, color: '#8b5cf6' },
+      { id: 'completed', name: 'Completed', value: stats.projectStatus.completed, color: '#10b981' },
+      { id: 'stopped', name: 'Stopped', value: stats.projectStatus.stopped, color: '#ef4444' },
+      { id: 'totalProjects', name: 'Total Projects', value: totalStatusProjects, color: '#6366f1' },
     ];
   }, [stats]);
 
@@ -901,38 +1061,11 @@ export default function App() {
                     {/* Distribution Chart */}
                     <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Project Status: {selectedDivision}</h3>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                            <XAxis type="number" hide />
-                            <YAxis 
-                              dataKey="name" 
-                              type="category" 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }}
-                              width={100}
-                            />
-                            <Tooltip 
-                              cursor={{ fill: '#f8fafc' }}
-                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            />
-                            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-                        {chartData.map((item) => (
-                          <div key={item.name} className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">{item.name}: {item.value}</span>
-                          </div>
-                        ))}
+                      <div className="h-[350px]">
+                        <CustomProjectStatusChart 
+                          data={chartData} 
+                          onCategoryClick={(cat) => setActiveCategory(activeCategory === cat ? null : cat)}
+                        />
                       </div>
                     </section>
                   </div>
@@ -972,7 +1105,7 @@ export default function App() {
                 </div>
               </>
             ) : activeTab === 'roads' ? (
-              <RoadsDashboard data={rawNetworkData} selectedDivision={selectedDivision} onDetailViewChange={setIsRoadsDetailView} resetViewTrigger={resetRoadsView} />
+              <RoadsDashboard data={rawNetworkData} structureData={rawStructureData} selectedDivision={selectedDivision} onDetailViewChange={setIsRoadsDetailView} resetViewTrigger={resetRoadsView} />
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
