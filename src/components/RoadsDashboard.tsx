@@ -159,6 +159,80 @@ const RoadDetailsView = ({ road, onBack }: { road: any, onBack: () => void }) =>
   );
 };
 
+const StructureDetailsView = ({ structure, roadName, onBack }: { structure: any, roadName: string, onBack: () => void }) => {
+  const keys = Object.keys(structure);
+  const findKey = (searchStr: string) => {
+    const normalizedSearch = searchStr.replace(/\s+/g, '').toLowerCase();
+    return keys.find(k => k.replace(/\s+/g, '').toLowerCase().includes(normalizedSearch)) || searchStr;
+  };
+
+  const strType = structure['Structure Type'] || structure['Structure_Type'] || structure['Type'] || 'N/A';
+
+  const firstSegment = [
+    { label: 'Str_Unique_ID', value: structure['Str_Unique_ID'] || structure['Str Unique ID'] || structure['id'] },
+    { label: 'Road Name', value: roadName },
+    { label: 'Structure_Type', value: strType },
+    { label: 'Chainage', value: structure['Chainage'] },
+    { label: 'LatLong', value: structure['LatLong'] || structure['Lat Long'] || structure['Coordinates'] },
+    { label: 'Visited ?', value: structure['Visited ?'] || structure['Visited'] },
+    { label: 'Visited Date', value: structure['Visited Date'] || structure['Date Visited'] },
+    { label: 'Condition', value: structure['Condition'] }
+  ];
+
+  const secondSegment = [
+    { label: 'Const. Year', value: structure['Const. Year'] || structure['Construction Year'] },
+    { label: 'Bridge Name', value: structure['Bridge Name'] },
+    { label: 'River/Canal/Natural Drain Name', value: structure[findKey('River/Canal/Natural Drain Name')] || structure['River Name'] },
+    { label: 'Length (Mt.)', value: structure[findKey('Length (Mt.)')] || structure['Length'] },
+    { label: 'Carriage Way (Mt.)', value: structure[findKey('Carriage Way (Mt.)')] || structure['Carriage Way'] }
+  ];
+
+  const lastSegment = [
+    { label: 'Bridge Configuration (Span details, Type of Super Structure, Type of Sub Structure, High Level/ Low Level, etc)', value: structure[findKey('Bridge Configuration (Span details, Type of Super Structure, Type of Sub Structure, High Level/ Low Level, etc)')] || structure['Bridge Configuration'] },
+    { label: 'Defect Details (In Short) If Any', value: structure[findKey('Defect Details (In Short) If Any')] || structure['Defect Details'] },
+    { label: 'Action Taken Report ( કરેલ કામગીરીની વિગતો)', value: structure[findKey('In Case Critical or Poor Bridge, Action Taken Report ( કરેલ કામગીરીની વિગતો)')] || structure['Action Taken Report'] }
+  ];
+
+  const Section = ({ title, data }: { title: string, data: any[] }) => {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">{title}</h3>
+        </div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {data.map((item, idx) => (
+            <div key={idx} className="space-y-1">
+              <p className="text-xs font-medium text-slate-500 break-words">{item.label}</p>
+              <p className="text-sm font-semibold text-slate-900 break-words">{item.value || 'N/A'}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 mb-6">
+        <button 
+          onClick={onBack}
+          className="p-2 hover:bg-slate-200 bg-slate-100 rounded-full transition-colors text-slate-600 shrink-0"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-slate-900">{structure['Bridge Name'] || structure['Str_Unique_ID'] || 'Structure Details'}</h2>
+          <p className="text-sm text-slate-500 font-medium mt-1">{roadName} • {strType}</p>
+        </div>
+      </div>
+
+      <Section title="Primary Details" data={firstSegment} />
+      <Section title="Technical Specifications" data={secondSegment} />
+      <Section title="Configuration & Condition" data={lastSegment} />
+    </div>
+  );
+};
+
 const CustomRoadCategoryChart = ({ data, onCategoryClick }: { data: any[], onCategoryClick: (category: string) => void }) => {
   const maxValue = Math.max(...data.map(d => d.value));
 
@@ -324,8 +398,9 @@ const CustomLengthDistributionChart = ({ breakdowns }: { breakdowns: any }) => {
 export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureData = [], selectedDivision, onDetailViewChange, resetViewTrigger }) => {
   const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | 'structures' | string | null>(null);
   const [selectedRoad, setSelectedRoad] = useState<any | null>(null);
+  const [selectedStructure, setSelectedStructure] = useState<any | null>(null);
   const [roadSearchTerm, setRoadSearchTerm] = useState('');
-  const [structureCategoryFilter, setStructureCategoryFilter] = useState<string>('All');
+  const [structureCategoryFilter, setStructureCategoryFilter] = useState<string>('Major Bridge');
 
   const roadMap = useMemo(() => {
     const map = new Map();
@@ -338,20 +413,6 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
     return map;
   }, [data]);
 
-  React.useEffect(() => {
-    if (resetViewTrigger && resetViewTrigger > 0) {
-      setActiveDetailView(null);
-      setSelectedRoad(null);
-      setRoadSearchTerm('');
-    }
-  }, [resetViewTrigger]);
-
-  React.useEffect(() => {
-    if (onDetailViewChange) {
-      onDetailViewChange(!!activeDetailView || !!selectedRoad);
-    }
-  }, [activeDetailView, selectedRoad, onDetailViewChange]);
-
   const filteredData = useMemo(() => {
     if (selectedDivision === 'RC2') return data;
     return data.filter(row => {
@@ -359,6 +420,39 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
       return div.includes(selectedDivision.toLowerCase());
     });
   }, [data, selectedDivision]);
+
+  const structureCategoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const validRoadIds = new Set(filteredData.map(r => String(r['Road_ID'] || r['Road ID'] || r['road_id'])));
+    
+    structureData.forEach(s => {
+      const roadId = String(s['Road_ID'] || s['Road ID'] || s['road_id']);
+      if (validRoadIds.has(roadId)) {
+        const type = s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other';
+        counts[type] = (counts[type] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [structureData, filteredData]);
+
+  const totalStructuresCount = useMemo(() => {
+    return Object.values(structureCategoryCounts).reduce((a: number, b: number) => a + b, 0);
+  }, [structureCategoryCounts]);
+
+  React.useEffect(() => {
+    if (resetViewTrigger && resetViewTrigger > 0) {
+      setActiveDetailView(null);
+      setSelectedRoad(null);
+      setSelectedStructure(null);
+      setRoadSearchTerm('');
+    }
+  }, [resetViewTrigger]);
+
+  React.useEffect(() => {
+    if (onDetailViewChange) {
+      onDetailViewChange(!!activeDetailView || !!selectedRoad || !!selectedStructure);
+    }
+  }, [activeDetailView, selectedRoad, selectedStructure, onDetailViewChange]);
 
   const stats = useMemo(() => {
     let totalRoads = 0;
@@ -494,6 +588,11 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
     return <RoadDetailsView road={selectedRoad} onBack={() => setSelectedRoad(null)} />;
   }
 
+  if (selectedStructure) {
+    const roadName = roadMap.get(String(selectedStructure['Road_ID'] || selectedStructure['Road ID'] || selectedStructure['road_id'])) || selectedStructure['Road Name'] || selectedStructure['Road_Name'] || 'Unknown Road';
+    return <StructureDetailsView structure={selectedStructure} roadName={roadName} onBack={() => setSelectedStructure(null)} />;
+  }
+
   if (activeDetailView) {
     let title = "Road Network Details";
     let displayedData = filteredData;
@@ -519,7 +618,18 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
         const matchesRoad = validRoadIds.has(roadId);
         const type = s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other';
         const matchesCategory = structureCategoryFilter === 'All' || type === structureCategoryFilter;
-        return matchesRoad && matchesCategory;
+        
+        let matchesSearch = true;
+        if (roadSearchTerm) {
+          const rName = (roadMap.get(roadId) || s['Road Name'] || s['Road_Name'] || '').toLowerCase();
+          const strId = String(s['Str_Unique_ID'] || s['Str Unique ID'] || '').toLowerCase();
+          const bName = String(s['Bridge Name'] || '').toLowerCase();
+          matchesSearch = rName.includes(roadSearchTerm.toLowerCase()) || 
+                          strId.includes(roadSearchTerm.toLowerCase()) ||
+                          bName.includes(roadSearchTerm.toLowerCase());
+        }
+
+        return matchesRoad && matchesCategory && matchesSearch;
       });
     } else if (activeDetailView && !['total', 'wip', 'dlp', 'nondlp', 'structures'].includes(activeDetailView)) {
       title = `${activeDetailView} Road Details`;
@@ -622,23 +732,32 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
               </div>
               <div className="flex flex-wrap gap-2 sm:gap-3 text-xs font-medium">
                 {activeDetailView === 'structures' ? (
-                  <div className="flex items-center gap-4">
-                    <div className="bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-100">
-                      <span className="font-bold">Total Structures:</span> {aggTotalStructures}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Structure Wise Filter:</span>
-                      <select 
-                        value={structureCategoryFilter}
-                        onChange={(e) => setStructureCategoryFilter(e.target.value)}
-                        className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                  <div className="flex flex-wrap items-center gap-2">
+                    {Object.entries(structureCategoryCounts).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([cat, count]) => (
+                      <button
+                        key={cat}
+                        onClick={() => setStructureCategoryFilter(cat)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border transition-all font-bold",
+                          structureCategoryFilter === cat 
+                            ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
+                            : "bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100"
+                        )}
                       >
-                        <option value="All">All Categories</option>
-                        {Array.from(new Set(structureData.map(s => s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other').filter(Boolean))).map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
+                        {cat} : {count}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setStructureCategoryFilter('All')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg border transition-all font-bold",
+                        structureCategoryFilter === 'All' 
+                          ? "bg-slate-700 text-white border-slate-700 shadow-sm" 
+                          : "bg-slate-50 text-slate-700 border-slate-100 hover:bg-slate-100"
+                      )}
+                    >
+                      Total Structure : {totalStructuresCount}
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -655,12 +774,12 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
                 )}
               </div>
             </div>
-            {activeDetailView === 'total' && (
+            {(activeDetailView === 'total' || activeDetailView === 'structures') && (
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input 
                   type="text" 
-                  placeholder="Search road name..." 
+                  placeholder={activeDetailView === 'structures' ? "Search structure, road or ID..." : "Search road name..."} 
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   value={roadSearchTerm}
                   onChange={(e) => setRoadSearchTerm(e.target.value)}
@@ -754,7 +873,10 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
                       {activeDetailView === 'structures' && (
                         <>
                           <td className="p-4">
-                            <span className="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold rounded-md uppercase">
+                            <span 
+                              onClick={() => setSelectedStructure(row)}
+                              className="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold rounded-md uppercase cursor-pointer hover:bg-purple-100 hover:shadow-sm transition-all"
+                            >
                               {row['Structure Type'] || row['Structure_Type'] || row['Type'] || 'N/A'}
                             </span>
                           </td>
