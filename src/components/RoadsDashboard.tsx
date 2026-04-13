@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map, Navigation, Signpost, Milestone, Compass, Car } from 'lucide-react';
+import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map as MapIcon, Navigation, Signpost, Milestone, Compass, Car, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   BarChart, 
@@ -14,9 +14,21 @@ import {
   PieChart,
   Pie
 } from 'recharts';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix for default marker icons in React Leaflet
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 interface RoadsDashboardProps {
   data: any[];
+  structureData?: any[];
   selectedDivision: string;
   onDetailViewChange?: (isDetail: boolean) => void;
   resetViewTrigger?: number;
@@ -158,12 +170,12 @@ const RoadDetailsView = ({ road, onBack }: { road: any, onBack: () => void }) =>
   );
 };
 
-const CustomRoadCategoryChart = ({ data }: { data: any[] }) => {
+const CustomRoadCategoryChart = ({ data, onCategoryClick }: { data: any[], onCategoryClick: (category: string) => void }) => {
   const maxValue = Math.max(...data.map(d => d.value));
 
   const getIcon = (name: string) => {
     switch (name) {
-      case 'NH': return <Map size={24} className="text-blue-500" />;
+      case 'NH': return <MapIcon size={24} className="text-blue-500" />;
       case 'SH': return <Route size={24} className="text-orange-500" />;
       case 'MDR': return <Navigation size={24} className="text-teal-700" />;
       case 'ODR': return <Signpost size={24} className="text-amber-500" />;
@@ -204,10 +216,14 @@ const CustomRoadCategoryChart = ({ data }: { data: any[] }) => {
 
       <div className="space-y-4 relative z-10 py-2">
         {data.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-4 group">
+          <div 
+            key={idx} 
+            className="flex items-center gap-4 group cursor-pointer"
+            onClick={() => onCategoryClick(item.name)}
+          >
             <div className="w-40 sm:w-56 shrink-0 flex items-center justify-end gap-3 border-r-2 border-slate-300 pr-4 py-1 relative">
               <div className="flex flex-col items-end text-right">
-                <span className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">{item.fullName}</span>
+                <span className="text-xs sm:text-sm font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">{item.fullName}</span>
                 <span className="text-[10px] sm:text-xs font-bold text-slate-500">({item.name})</span>
               </div>
               <div className="shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -237,10 +253,129 @@ const CustomRoadCategoryChart = ({ data }: { data: any[] }) => {
   );
 };
 
-export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDivision, onDetailViewChange, resetViewTrigger }) => {
-  const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | null>(null);
+const CustomLengthDistributionChart = ({ breakdowns }: { breakdowns: any }) => {
+  const categories = [
+    { id: 'dlp', name: 'DLP (Defect Liability Period)', data: breakdowns.dlp, color: 'emerald', bg: 'bg-emerald-200', text: 'text-emerald-800', title: 'text-emerald-700' },
+    { id: 'nondlp', name: 'Non-DLP', data: breakdowns.nonDlp, color: 'amber', bg: 'bg-amber-200', text: 'text-amber-800', title: 'text-amber-700' },
+    { id: 'wip', name: 'WIP (Work In Progress)', data: breakdowns.wip, color: 'blue', bg: 'bg-blue-200', text: 'text-blue-800', title: 'text-blue-700' },
+    { id: 'total', name: 'Total Roads Length', data: breakdowns.total, color: 'indigo', bg: 'bg-indigo-200', text: 'text-indigo-800', title: 'text-indigo-700' }
+  ];
+
+  return (
+    <div className="flex flex-col gap-8 w-full max-w-5xl mx-auto py-4">
+      {categories.map(cat => {
+        const total = cat.data.total || 1; // prevent div by zero
+        const pRepaired = (cat.data.repaired / total) * 100;
+        const pUnattained = (cat.data.unattained / total) * 100;
+        const pIntact = (cat.data.intact / total) * 100;
+
+        return (
+          <div key={cat.id} className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+              <div>
+                <h4 className={`text-lg font-bold ${cat.title}`}>{cat.name}</h4>
+                <p className="text-sm text-slate-500 font-bold mt-1">Total Length: {cat.data.total.toFixed(2)} KM</p>
+              </div>
+              <div className="flex gap-4 sm:gap-8 text-xs sm:text-sm font-bold bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="flex flex-col items-center sm:items-end">
+                  <span className="text-emerald-600 uppercase tracking-wider text-[10px] sm:text-xs mb-1">Repaired</span>
+                  <span className="text-slate-800">{cat.data.repaired.toFixed(2)} KM</span>
+                </div>
+                <div className="w-px bg-slate-200"></div>
+                <div className="flex flex-col items-center sm:items-end">
+                  <span className="text-red-500 uppercase tracking-wider text-[10px] sm:text-xs mb-1">Unattained</span>
+                  <span className="text-slate-800">{cat.data.unattained.toFixed(2)} KM</span>
+                </div>
+                <div className="w-px bg-slate-200"></div>
+                <div className="flex flex-col items-center sm:items-end">
+                  <span className="text-slate-500 uppercase tracking-wider text-[10px] sm:text-xs mb-1">Intact</span>
+                  <span className="text-slate-800">{cat.data.intact.toFixed(2)} KM</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* The Bar */}
+            <div className="h-8 sm:h-10 w-full bg-slate-100 rounded-xl overflow-hidden flex shadow-inner relative">
+              {/* Tooltips/Labels on hover are handled by group-hover inside each segment */}
+              <div 
+                className="bg-emerald-500 h-full transition-all duration-1000 ease-out relative group cursor-help border-r border-white/20"
+                style={{ width: `${pRepaired}%` }}
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem]"></div>
+                {pRepaired > 5 && <span className="absolute inset-0 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">{pRepaired.toFixed(1)}%</span>}
+              </div>
+              <div 
+                className="bg-red-500 h-full transition-all duration-1000 ease-out relative group cursor-help border-r border-white/20"
+                style={{ width: `${pUnattained}%` }}
+              >
+                <div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.1)_5px,rgba(255,255,255,0.1)_10px)]"></div>
+                {pUnattained > 5 && <span className="absolute inset-0 flex items-center justify-center text-[10px] sm:text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">{pUnattained.toFixed(1)}%</span>}
+              </div>
+              <div 
+                className={`${cat.bg} h-full transition-all duration-1000 ease-out relative group cursor-help`}
+                style={{ width: `${pIntact}%` }}
+              >
+                {pIntact > 5 && <span className={`absolute inset-0 flex items-center justify-center text-[10px] sm:text-xs font-bold ${cat.text} opacity-0 group-hover:opacity-100 transition-opacity`}>{pIntact.toFixed(1)}%</span>}
+              </div>
+            </div>
+            
+            {/* Legend for this specific bar */}
+            <div className="flex gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-1">
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Repaired</div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500"></div> Unattained</div>
+              <div className="flex items-center gap-1.5"><div className={`w-2 h-2 rounded-full ${cat.bg}`}></div> Intact</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureData = [], selectedDivision, onDetailViewChange, resetViewTrigger }) => {
+  const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | 'structures' | 'map' | string | null>(null);
   const [selectedRoad, setSelectedRoad] = useState<any | null>(null);
   const [roadSearchTerm, setRoadSearchTerm] = useState('');
+  const [mapCategoryFilter, setMapCategoryFilter] = useState<string>('All');
+  const [structureCategoryFilter, setStructureCategoryFilter] = useState<string>('All');
+
+  const roadMap = useMemo(() => {
+    const map = new Map();
+    data.forEach(road => {
+      const id = road['Road_ID'] || road['Road ID'] || road['road_id'];
+      if (id) {
+        map.set(String(id), road['Road Name with Chainages'] || road['Road Name']);
+      }
+    });
+    return map;
+  }, [data]);
+
+  const getStructureIcon = (type: string) => {
+    const normalizedType = type.toLowerCase();
+    let color = '#8b5cf6'; // Default purple
+    let label = 'S';
+    
+    if (normalizedType.includes('major bridge')) { color = '#ef4444'; label = 'MJ'; }
+    else if (normalizedType.includes('minor bridge')) { color = '#f97316'; label = 'MN'; }
+    else if (normalizedType.includes('box culvert')) { color = '#3b82f6'; label = 'BC'; }
+    else if (normalizedType.includes('slab drain') || normalizedType.includes('slab culvert')) { color = '#10b981'; label = 'SD'; }
+    else if (normalizedType.includes('pipe culvert')) { color = '#06b6d4'; label = 'PC'; }
+    else if (normalizedType.includes('causeway')) { color = '#ec4899'; label = 'CW'; }
+
+    return L.divIcon({
+      className: 'custom-div-icon',
+      html: `<div style="position: relative; width: 32px; height: 32px;">
+               <svg viewBox="0 0 24 24" width="32" height="32" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));">
+                 <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 7 13 8 13s8-7.75 8-13c0-4.42-3.58-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/>
+                 <circle cx="12" cy="8" r="5" fill="white"/>
+                 <text x="12" y="9.5" text-anchor="middle" style="font-family: sans-serif; font-size: 5px; font-weight: bold; fill: ${color};">${label}</text>
+               </svg>
+             </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32]
+    });
+  };
 
   React.useEffect(() => {
     if (resetViewTrigger && resetViewTrigger > 0) {
@@ -270,6 +405,21 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
     let totalDlp = 0;
     let totalNonDlp = 0;
     let totalWip = 0;
+    let totalStructures = 0;
+
+    let dlpDamaged = 0;
+    let dlpRepaired = 0;
+    
+    let nonDlpDamaged = 0;
+    let nonDlpRepaired = 0;
+
+    let wipDamaged = 0;
+
+    const findKeyInRow = (row: any, searchStr: string) => {
+      const keys = Object.keys(row);
+      const normalizedSearch = searchStr.replace(/\s+/g, '').toLowerCase();
+      return keys.find(k => k.replace(/\s+/g, '').toLowerCase().includes(normalizedSearch)) || searchStr;
+    };
 
     const categoryLengths: Record<string, number> = {
       'SH': 0, 'MDR': 0, 'CH': 0, 'VR': 0, 'SHDP': 0, 'BYPASS': 0, 'NH': 0, 'ODR': 0, 'SH OLD': 0
@@ -279,11 +429,31 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
       if (!row['Road Name with Chainages']) return;
       totalRoads++;
       
+      const keys = Object.keys(row);
+      for (let i = 65; i <= 70; i++) {
+        if (keys[i]) {
+          totalStructures += parseFloat(row[keys[i]] || '0') || 0;
+        }
+      }
+
       const length = parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0') || 0;
       totalLength += length;
-      totalDlp += parseFloat(row['DLP Length (In KM)'] || '0') || 0;
-      totalNonDlp += parseFloat(row['Non DLP Length (In KM)'] || '0') || 0;
-      totalWip += parseFloat(row['WIP Length (In KM)'] || '0') || 0;
+      
+      const dlpLen = parseFloat(row['DLP Length (In KM)'] || '0') || 0;
+      const nonDlpLen = parseFloat(row['Non DLP Length (In KM)'] || '0') || 0;
+      const wipLen = parseFloat(row['WIP Length (In KM)'] || '0') || 0;
+
+      totalDlp += dlpLen;
+      totalNonDlp += nonDlpLen;
+      totalWip += wipLen;
+
+      dlpDamaged += parseFloat(row[findKeyInRow(row, 'મરામતકરવાપાત્રલંબાઇ=a+b(DLP)')] || '0') || 0;
+      dlpRepaired += (parseFloat(row[findKeyInRow(row, 'પેવરપટ્ટાકરેલલંબાઇ(DLP-Major)(d)')] || '0') || 0) + (parseFloat(row[findKeyInRow(row, 'DLPમાઇનરપેચવર્કકરેલલંબાઇ(e)')] || '0') || 0);
+
+      nonDlpDamaged += parseFloat(row[findKeyInRow(row, 'મરામતકરવાપાત્રલંબાઇ=a+b(NonDLP)')] || '0') || 0;
+      nonDlpRepaired += (parseFloat(row[findKeyInRow(row, 'પેવરપટ્ટાકરેલલંબાઇ(NonDLP-Major)(d)')] || '0') || 0) + (parseFloat(row[findKeyInRow(row, 'NonDLPમાઇનરપેચવર્કકરેલલંબાઇ(e)')] || '0') || 0);
+
+      wipDamaged += parseFloat(row[findKeyInRow(row, 'મરામતબાકીરહેલલંબાઇ(WIP)')] || row['WIP Length (In KM)'] || '0') || 0;
 
       const category = String(row['Road Category'] || '').toUpperCase().trim();
       if (categoryLengths[category] !== undefined) {
@@ -315,8 +485,18 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
       }))
       .sort((a, b) => b.value - a.value);
 
+    const dlpUnattained = Math.max(0, dlpDamaged - dlpRepaired);
+    const dlpIntact = Math.max(0, totalDlp - dlpDamaged);
+
+    const nonDlpUnattained = Math.max(0, nonDlpDamaged - nonDlpRepaired);
+    const nonDlpIntact = Math.max(0, totalNonDlp - nonDlpDamaged);
+
+    const wipUnattained = wipDamaged;
+    const wipIntact = Math.max(0, totalWip - wipDamaged);
+
     return {
       totalRoads,
+      totalStructures,
       totalLength: totalLength.toFixed(2),
       totalDlp: totalDlp.toFixed(2),
       totalNonDlp: totalNonDlp.toFixed(2),
@@ -326,7 +506,18 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
         { name: 'DLP', value: parseFloat(totalDlp.toFixed(2)), color: '#10b981' },
         { name: 'Non-DLP', value: parseFloat(totalNonDlp.toFixed(2)), color: '#f59e0b' },
         { name: 'WIP', value: parseFloat(totalWip.toFixed(2)), color: '#3b82f6' },
-      ]
+      ],
+      breakdowns: {
+        dlp: { total: totalDlp, repaired: dlpRepaired, unattained: dlpUnattained, intact: dlpIntact },
+        nonDlp: { total: totalNonDlp, repaired: nonDlpRepaired, unattained: nonDlpUnattained, intact: nonDlpIntact },
+        wip: { total: totalWip, repaired: 0, unattained: wipUnattained, intact: wipIntact },
+        total: { 
+          total: totalLength, 
+          repaired: dlpRepaired + nonDlpRepaired, 
+          unattained: dlpUnattained + nonDlpUnattained + wipUnattained, 
+          intact: Math.max(0, totalLength - (dlpRepaired + nonDlpRepaired) - (dlpUnattained + nonDlpUnattained + wipUnattained)) 
+        }
+      }
     };
   }, [filteredData]);
 
@@ -342,6 +533,137 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
     return <RoadDetailsView road={selectedRoad} onBack={() => setSelectedRoad(null)} />;
   }
 
+  if (activeDetailView === 'map') {
+    const getCoordinates = (s: any) => {
+      let lat = 0;
+      let lng = 0;
+      
+      // Check for combined LatLong column
+      const latLongStr = s['LatLong'] || s['Lat Long'] || s['Lat/Long'] || s['Coordinates'];
+      if (latLongStr && typeof latLongStr === 'string' && latLongStr.includes(',')) {
+        const parts = latLongStr.split(',');
+        lat = parseFloat(parts[0].trim());
+        lng = parseFloat(parts[1].trim());
+      } else {
+        lat = parseFloat(s['Latitude'] || s['Lat'] || s['latitude'] || '0');
+        lng = parseFloat(s['Longitude'] || s['Long'] || s['longitude'] || '0');
+      }
+      
+      return { lat, lng };
+    };
+
+    // Get unique categories for filter
+    const categories = Array.from(new Set(structureData.map(s => s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other').filter(Boolean)));
+
+    // Filter structures that have valid lat/long AND match category filter
+    const validStructures = structureData.filter(s => {
+      const { lat, lng } = getCoordinates(s);
+      const type = s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other';
+      const matchesCategory = mapCategoryFilter === 'All' || type === mapCategoryFilter;
+      return lat !== 0 && lng !== 0 && !isNaN(lat) && !isNaN(lng) && matchesCategory;
+    });
+
+    const centerLat = validStructures.length > 0 ? getCoordinates(validStructures[0]).lat : 22.2587;
+    const centerLng = validStructures.length > 0 ? getCoordinates(validStructures[0]).lng : 71.1924;
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[800px]">
+          <div className="bg-white px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm shrink-0">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setActiveDetailView(null)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 hover:text-slate-900 shrink-0"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Structures Map View</h2>
+                <p className="text-xs font-medium text-slate-500">Showing {validStructures.length} structures</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-400 uppercase">Filter Type:</span>
+              <select 
+                value={mapCategoryFilter}
+                onChange={(e) => setMapCategoryFilter(e.target.value)}
+                className="text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+              >
+                <option value="All">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex-1 relative z-0">
+            {validStructures.length > 0 ? (
+              <MapContainer 
+                center={[centerLat, centerLng]} 
+                zoom={8} 
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {validStructures.map((structure, idx) => {
+                  const { lat, lng } = getCoordinates(structure);
+                  const roadId = structure['Road_ID'] || structure['Road ID'] || structure['road_id'];
+                  const structureType = structure['Structure Type'] || structure['Structure_Type'] || structure['Type'] || 'Structure';
+                  const roadName = roadMap.get(String(roadId)) || structure['Road Name'] || structure['Road_Name'] || 'Unknown Road';
+                  
+                  return (
+                    <Marker key={idx} position={[lat, lng]} icon={getStructureIcon(structureType)}>
+                      <Popup className="rounded-xl">
+                        <div className="p-1 min-w-[220px]">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 bg-purple-100 rounded-lg text-purple-600">
+                              <Construction size={16} />
+                            </div>
+                            <h3 className="font-bold text-slate-900">{structureType}</h3>
+                          </div>
+                          <div className="space-y-1.5 text-sm">
+                            <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mb-2">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Road Name</p>
+                              <p className="text-indigo-600 font-bold leading-tight">{roadName}</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                              {structure['Chainage'] && (
+                                <div>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Chainage</p>
+                                  <p className="text-slate-700 font-medium">{structure['Chainage']}</p>
+                                </div>
+                              )}
+                            </div>
+                            {structure['Condition'] && (
+                              <div className="pt-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">Condition</p>
+                                <p className="text-slate-700 font-medium">{structure['Condition']}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+              </MapContainer>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-500">
+                <MapIcon size={48} className="text-slate-300 mb-4" />
+                <p className="font-medium">No valid coordinates found in Structure data.</p>
+                <p className="text-sm mt-1">Please ensure the Structure sheet contains Latitude and Longitude columns.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeDetailView) {
     let title = "Road Network Details";
     let displayedData = filteredData;
@@ -355,6 +677,23 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
     } else if (activeDetailView === 'nondlp') {
       title = "Non-DLP Road Details";
       displayedData = filteredData.filter(row => parseFloat(row['Non DLP Length (In KM)'] || '0') > 0);
+    } else if (activeDetailView === 'structures') {
+      title = "Road Structure Details";
+      
+      // Get valid road IDs in the current division
+      const validRoadIds = new Set(filteredData.map(r => String(r['Road_ID'] || r['Road ID'] || r['road_id'])));
+      
+      // Filter structure data by these road IDs
+      displayedData = structureData.filter(s => {
+        const roadId = String(s['Road_ID'] || s['Road ID'] || s['road_id']);
+        const matchesRoad = validRoadIds.has(roadId);
+        const type = s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other';
+        const matchesCategory = structureCategoryFilter === 'All' || type === structureCategoryFilter;
+        return matchesRoad && matchesCategory;
+      });
+    } else if (activeDetailView && !['total', 'wip', 'dlp', 'nondlp', 'structures'].includes(activeDetailView)) {
+      title = `${activeDetailView} Road Details`;
+      displayedData = filteredData.filter(row => String(row['Road Category'] || '').toUpperCase().trim() === activeDetailView);
     }
 
     const findKeyInRow = (row: any, searchStr: string) => {
@@ -372,6 +711,11 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
 
     // Calculate unattained length for each row to sort them
     const dataWithUnattained = displayedData.map(row => {
+      // If we are in structures view, we are dealing with structure objects, not road objects
+      if (activeDetailView === 'structures') {
+        return { ...row, _unattained: 0, _tDamaged: 0, _tRepaired: 0, _totalStructures: 0 };
+      }
+
       const dDLP = parseFloat(row[findKeyInRow(row, 'મરામતકરવાપાત્રલંબાઇ=a+b(DLP)')] || '0') || 0;
       const dNonDLP = parseFloat(row[findKeyInRow(row, 'મરામતકરવાપાત્રલંબાઇ=a+b(NonDLP)')] || '0') || 0;
       const dWIP = parseFloat(row[findKeyInRow(row, 'મરામતબાકીરહેલલંબાઇ(WIP)')] || row['WIP Length (In KM)'] || '0') || 0;
@@ -384,22 +728,37 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
       const tRepaired = rDLP + rDLPMinor + rNonDLP + rNonDLPMinor;
 
       const unattained = tDamaged - tRepaired;
-      return { ...row, _unattained: unattained, _tDamaged: tDamaged, _tRepaired: tRepaired };
+
+      let tStructures = 0;
+      const keys = Object.keys(row);
+      for (let i = 65; i <= 70; i++) {
+        if (keys[i]) {
+          tStructures += parseFloat(row[keys[i]] || '0') || 0;
+        }
+      }
+
+      return { ...row, _unattained: unattained, _tDamaged: tDamaged, _tRepaired: tRepaired, _totalStructures: tStructures };
     });
 
     // Sort descending by unattained length
-    dataWithUnattained.sort((a, b) => b._unattained - a._unattained);
+    if (activeDetailView !== 'structures') {
+      dataWithUnattained.sort((a, b) => b._unattained - a._unattained);
+    }
+    
     displayedData = dataWithUnattained;
 
     let aggTotalLength = 0;
     let aggDamagedLength = 0;
     let aggRepairedLength = 0;
+    let aggTotalStructures = displayedData.length;
 
     displayedData.forEach(row => {
-      const tLen = parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0') || 0;
-      aggTotalLength += tLen;
-      aggDamagedLength += row._tDamaged;
-      aggRepairedLength += row._tRepaired;
+      if (activeDetailView !== 'structures') {
+        const tLen = parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0') || 0;
+        aggTotalLength += tLen;
+        aggDamagedLength += row._tDamaged;
+        aggRepairedLength += row._tRepaired;
+      }
     });
 
     const aggUnattainedLength = aggDamagedLength - aggRepairedLength;
@@ -424,19 +783,46 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
                 </button>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-                  <p className="text-xs font-medium text-slate-500">{displayedData.length} Roads • {aggTotalLength.toFixed(2)} KM Total</p>
+                  {activeDetailView === 'structures' ? (
+                    <p className="text-xs font-medium text-slate-500">Showing individual structure details</p>
+                  ) : (
+                    <p className="text-xs font-medium text-slate-500">{displayedData.length} Roads • {aggTotalLength.toFixed(2)} KM Total</p>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 sm:gap-3 text-xs font-medium">
-                <div className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg border border-red-100">
-                  <span className="font-bold">Damaged:</span> {aggDamagedPct}% ({aggDamagedLength.toFixed(2)} KM)
-                </div>
-                <div className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100">
-                  <span className="font-bold">Repaired:</span> {aggRepairedPct}% ({aggRepairedLength.toFixed(2)} KM)
-                </div>
-                <div className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100">
-                  <span className="font-bold">Unattained:</span> {aggUnattainedPct}% ({aggUnattainedLength.toFixed(2)} KM)
-                </div>
+                {activeDetailView === 'structures' ? (
+                  <div className="flex items-center gap-4">
+                    <div className="bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-100">
+                      <span className="font-bold">Total Structures:</span> {aggTotalStructures}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase">Structure Wise Filter:</span>
+                      <select 
+                        value={structureCategoryFilter}
+                        onChange={(e) => setStructureCategoryFilter(e.target.value)}
+                        className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                      >
+                        <option value="All">All Categories</option>
+                        {Array.from(new Set(structureData.map(s => s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other').filter(Boolean))).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg border border-red-100">
+                      <span className="font-bold">Damaged:</span> {aggDamagedPct}% ({aggDamagedLength.toFixed(2)} KM)
+                    </div>
+                    <div className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100">
+                      <span className="font-bold">Repaired:</span> {aggRepairedPct}% ({aggRepairedLength.toFixed(2)} KM)
+                    </div>
+                    <div className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100">
+                      <span className="font-bold">Unattained:</span> {aggUnattainedPct}% ({aggUnattainedLength.toFixed(2)} KM)
+                    </div>
+                  </>
+                )}
               </div>
             </div>
             {activeDetailView === 'total' && (
@@ -457,8 +843,12 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Road Name</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Category</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Total Length (KM)</th>
+                  {activeDetailView !== 'structures' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Category</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Total Length (KM)</th>
+                    </>
+                  )}
                   {activeDetailView === 'total' && (
                     <>
                       <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">DLP (KM)</th>
@@ -469,26 +859,58 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
                   {activeDetailView === 'wip' && <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">WIP (KM)</th>}
                   {activeDetailView === 'dlp' && <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">DLP (KM)</th>}
                   {activeDetailView === 'nondlp' && <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Non-DLP (KM)</th>}
+                  {activeDetailView === 'structures' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Structure Type</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Chainage</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Condition</th>
+                    </>
+                  )}
+                  {activeDetailView !== 'total' && activeDetailView !== 'structures' && (
+                    <>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Damaged (KM)</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Repaired (KM)</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Unattained (KM)</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {displayedData.map((row, idx) => {
-                  if (!row['Road Name with Chainages']) return null;
+                  const roadName = activeDetailView === 'structures' 
+                    ? (roadMap.get(String(row['Road_ID'] || row['Road ID'] || row['road_id'])) || row['Road Name'] || row['Road_Name'] || 'Unknown Road')
+                    : (row['Road Name with Chainages'] || 'N/A');
+
                   return (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td 
                         className="p-4 text-sm font-semibold text-indigo-600 max-w-xs truncate cursor-pointer hover:underline" 
-                        title={row['Road Name with Chainages']}
-                        onClick={() => setSelectedRoad(row)}
+                        title={roadName}
+                        onClick={() => {
+                          if (activeDetailView === 'structures') {
+                            // Find the road object in data to show details
+                            const roadId = String(row['Road_ID'] || row['Road ID'] || row['road_id']);
+                            const roadObj = data.find(r => String(r['Road_ID'] || r['Road ID'] || r['road_id']) === roadId);
+                            if (roadObj) setSelectedRoad(roadObj);
+                          } else {
+                            setSelectedRoad(row);
+                          }
+                        }}
                       >
-                        {row['Road Name with Chainages']}
+                        {roadName}
                       </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md uppercase">
-                          {row['Road Category'] || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-slate-600 font-medium">{row['રસ્તાની કુલ લંબાઇ'] || '0'}</td>
+                      {activeDetailView !== 'structures' && (
+                        <>
+                          <td className="p-4">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md uppercase">
+                              {row['Road Category'] || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-sm text-slate-600 font-medium">
+                            {parseFloat(row['રસ્તાની કુલ લંબાઇ'] || '0').toFixed(2)}
+                          </td>
+                        </>
+                      )}
                       {activeDetailView === 'total' && (
                         <>
                           <td className="p-4 text-sm text-emerald-600 font-medium">{row['DLP Length (In KM)'] || '0'}</td>
@@ -499,6 +921,24 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
                       {activeDetailView === 'wip' && <td className="p-4 text-sm text-blue-600 font-medium">{row['WIP Length (In KM)'] || '0'}</td>}
                       {activeDetailView === 'dlp' && <td className="p-4 text-sm text-emerald-600 font-medium">{row['DLP Length (In KM)'] || '0'}</td>}
                       {activeDetailView === 'nondlp' && <td className="p-4 text-sm text-amber-600 font-medium">{row['Non DLP Length (In KM)'] || '0'}</td>}
+                      {activeDetailView === 'structures' && (
+                        <>
+                          <td className="p-4">
+                            <span className="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold rounded-md uppercase">
+                              {row['Structure Type'] || row['Structure_Type'] || row['Type'] || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-sm text-slate-600 font-medium">{row['Chainage'] || 'N/A'}</td>
+                          <td className="p-4 text-sm text-purple-600 font-medium">{row['Condition'] || 'N/A'}</td>
+                        </>
+                      )}
+                      {activeDetailView !== 'total' && activeDetailView !== 'structures' && (
+                        <>
+                          <td className="p-4 text-sm text-red-600 font-medium">{row._tDamaged.toFixed(2)}</td>
+                          <td className="p-4 text-sm text-emerald-600 font-medium">{row._tRepaired.toFixed(2)}</td>
+                          <td className="p-4 text-sm text-amber-600 font-medium">{row._unattained.toFixed(2)}</td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
@@ -512,7 +952,7 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <StatCard 
           title="Total Roads" 
           value={stats.totalRoads} 
@@ -542,51 +982,37 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, selectedDi
           color="bg-amber-500" 
           onClick={() => setActiveDetailView('nondlp')}
         />
+        <StatCard 
+          title="Structures" 
+          value={stats.totalStructures} 
+          icon={Construction} 
+          color="bg-purple-500" 
+          onClick={() => setActiveDetailView('structures')}
+        />
+        <StatCard 
+          title="Map View" 
+          value="View" 
+          description="Structures Map"
+          icon={MapIcon} 
+          color="bg-teal-500" 
+          onClick={() => setActiveDetailView('map')}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Road Categories</h3>
           <div className="h-[400px]">
-            <CustomRoadCategoryChart data={stats.categories} />
+            <CustomRoadCategoryChart 
+              data={stats.categories} 
+              onCategoryClick={(cat) => setActiveDetailView(cat)}
+            />
           </div>
         </section>
 
         <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Length Distribution (KM)</h3>
-          <div className="h-64 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={stats.lengths}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {stats.lengths.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="ml-8 space-y-4">
-              {stats.lengths.map(item => (
-                <div key={item.name} className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <div>
-                    <p className="text-xs font-bold text-slate-500 uppercase">{item.name}</p>
-                    <p className="text-lg font-bold text-slate-900">{item.value} <span className="text-xs text-slate-400">KM</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CustomLengthDistributionChart breakdowns={stats.breakdowns} />
         </section>
       </div>
     </div>
