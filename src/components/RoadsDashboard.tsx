@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map as MapIcon, Navigation, Signpost, Milestone, Compass, Car, Layers } from 'lucide-react';
+import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map as MapIcon, Navigation, Signpost, Milestone, Compass, Car } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   BarChart, 
@@ -14,17 +14,6 @@ import {
   PieChart,
   Pie
 } from 'recharts';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Fix for default marker icons in React Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
 
 interface RoadsDashboardProps {
   data: any[];
@@ -333,10 +322,9 @@ const CustomLengthDistributionChart = ({ breakdowns }: { breakdowns: any }) => {
 };
 
 export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureData = [], selectedDivision, onDetailViewChange, resetViewTrigger }) => {
-  const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | 'structures' | 'map' | string | null>(null);
+  const [activeDetailView, setActiveDetailView] = useState<'total' | 'wip' | 'dlp' | 'nondlp' | 'structures' | string | null>(null);
   const [selectedRoad, setSelectedRoad] = useState<any | null>(null);
   const [roadSearchTerm, setRoadSearchTerm] = useState('');
-  const [mapCategoryFilter, setMapCategoryFilter] = useState<string>('All');
   const [structureCategoryFilter, setStructureCategoryFilter] = useState<string>('All');
 
   const roadMap = useMemo(() => {
@@ -349,33 +337,6 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
     });
     return map;
   }, [data]);
-
-  const getStructureIcon = (type: string) => {
-    const normalizedType = type.toLowerCase();
-    let color = '#8b5cf6'; // Default purple
-    let label = 'S';
-    
-    if (normalizedType.includes('major bridge')) { color = '#ef4444'; label = 'MJ'; }
-    else if (normalizedType.includes('minor bridge')) { color = '#f97316'; label = 'MN'; }
-    else if (normalizedType.includes('box culvert')) { color = '#3b82f6'; label = 'BC'; }
-    else if (normalizedType.includes('slab drain') || normalizedType.includes('slab culvert')) { color = '#10b981'; label = 'SD'; }
-    else if (normalizedType.includes('pipe culvert')) { color = '#06b6d4'; label = 'PC'; }
-    else if (normalizedType.includes('causeway')) { color = '#ec4899'; label = 'CW'; }
-
-    return L.divIcon({
-      className: 'custom-div-icon',
-      html: `<div style="position: relative; width: 32px; height: 32px;">
-               <svg viewBox="0 0 24 24" width="32" height="32" style="filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));">
-                 <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 7 13 8 13s8-7.75 8-13c0-4.42-3.58-8-8-8z" fill="${color}" stroke="white" stroke-width="1.5"/>
-                 <circle cx="12" cy="8" r="5" fill="white"/>
-                 <text x="12" y="9.5" text-anchor="middle" style="font-family: sans-serif; font-size: 5px; font-weight: bold; fill: ${color};">${label}</text>
-               </svg>
-             </div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32]
-    });
-  };
 
   React.useEffect(() => {
     if (resetViewTrigger && resetViewTrigger > 0) {
@@ -531,137 +492,6 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
 
   if (selectedRoad) {
     return <RoadDetailsView road={selectedRoad} onBack={() => setSelectedRoad(null)} />;
-  }
-
-  if (activeDetailView === 'map') {
-    const getCoordinates = (s: any) => {
-      let lat = 0;
-      let lng = 0;
-      
-      // Check for combined LatLong column
-      const latLongStr = s['LatLong'] || s['Lat Long'] || s['Lat/Long'] || s['Coordinates'];
-      if (latLongStr && typeof latLongStr === 'string' && latLongStr.includes(',')) {
-        const parts = latLongStr.split(',');
-        lat = parseFloat(parts[0].trim());
-        lng = parseFloat(parts[1].trim());
-      } else {
-        lat = parseFloat(s['Latitude'] || s['Lat'] || s['latitude'] || '0');
-        lng = parseFloat(s['Longitude'] || s['Long'] || s['longitude'] || '0');
-      }
-      
-      return { lat, lng };
-    };
-
-    // Get unique categories for filter
-    const categories = Array.from(new Set(structureData.map(s => s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other').filter(Boolean)));
-
-    // Filter structures that have valid lat/long AND match category filter
-    const validStructures = structureData.filter(s => {
-      const { lat, lng } = getCoordinates(s);
-      const type = s['Structure Type'] || s['Structure_Type'] || s['Type'] || 'Other';
-      const matchesCategory = mapCategoryFilter === 'All' || type === mapCategoryFilter;
-      return lat !== 0 && lng !== 0 && !isNaN(lat) && !isNaN(lng) && matchesCategory;
-    });
-
-    const centerLat = validStructures.length > 0 ? getCoordinates(validStructures[0]).lat : 22.2587;
-    const centerLng = validStructures.length > 0 ? getCoordinates(validStructures[0]).lng : 71.1924;
-
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[800px]">
-          <div className="bg-white px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm shrink-0">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setActiveDetailView(null)}
-                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 hover:text-slate-900 shrink-0"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Structures Map View</h2>
-                <p className="text-xs font-medium text-slate-500">Showing {validStructures.length} structures</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-400 uppercase">Filter Type:</span>
-              <select 
-                value={mapCategoryFilter}
-                onChange={(e) => setMapCategoryFilter(e.target.value)}
-                className="text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
-              >
-                <option value="All">All Categories</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          
-          <div className="flex-1 relative z-0">
-            {validStructures.length > 0 ? (
-              <MapContainer 
-                center={[centerLat, centerLng]} 
-                zoom={8} 
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                {validStructures.map((structure, idx) => {
-                  const { lat, lng } = getCoordinates(structure);
-                  const roadId = structure['Road_ID'] || structure['Road ID'] || structure['road_id'];
-                  const structureType = structure['Structure Type'] || structure['Structure_Type'] || structure['Type'] || 'Structure';
-                  const roadName = roadMap.get(String(roadId)) || structure['Road Name'] || structure['Road_Name'] || 'Unknown Road';
-                  
-                  return (
-                    <Marker key={idx} position={[lat, lng]} icon={getStructureIcon(structureType)}>
-                      <Popup className="rounded-xl">
-                        <div className="p-1 min-w-[220px]">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="p-1.5 bg-purple-100 rounded-lg text-purple-600">
-                              <Construction size={16} />
-                            </div>
-                            <h3 className="font-bold text-slate-900">{structureType}</h3>
-                          </div>
-                          <div className="space-y-1.5 text-sm">
-                            <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 mb-2">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Road Name</p>
-                              <p className="text-indigo-600 font-bold leading-tight">{roadName}</p>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                              {structure['Chainage'] && (
-                                <div>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Chainage</p>
-                                  <p className="text-slate-700 font-medium">{structure['Chainage']}</p>
-                                </div>
-                              )}
-                            </div>
-                            {structure['Condition'] && (
-                              <div className="pt-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Condition</p>
-                                <p className="text-slate-700 font-medium">{structure['Condition']}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
-              </MapContainer>
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-500">
-                <MapIcon size={48} className="text-slate-300 mb-4" />
-                <p className="font-medium">No valid coordinates found in Structure data.</p>
-                <p className="text-sm mt-1">Please ensure the Structure sheet contains Latitude and Longitude columns.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   }
 
   if (activeDetailView) {
@@ -952,7 +782,7 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard 
           title="Total Roads" 
           value={stats.totalRoads} 
@@ -988,14 +818,6 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
           icon={Construction} 
           color="bg-purple-500" 
           onClick={() => setActiveDetailView('structures')}
-        />
-        <StatCard 
-          title="Map View" 
-          value="View" 
-          description="Structures Map"
-          icon={MapIcon} 
-          color="bg-teal-500" 
-          onClick={() => setActiveDetailView('map')}
         />
       </div>
 
