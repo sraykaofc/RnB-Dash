@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map as MapIcon, Navigation, Signpost, Milestone, Compass, Car } from 'lucide-react';
+import { MapPin, Route, ShieldCheck, AlertTriangle, Construction, Activity, ArrowLeft, Search, Map as MapIcon, Navigation, Signpost, Milestone, Compass, Car, Waves, CircleDot, Square, Layers, Droplets, Box } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   BarChart, 
@@ -171,7 +171,7 @@ const StructureDetailsView = ({ structure, roadName, onBack }: { structure: any,
   const firstSegment = [
     { label: 'Str_Unique_ID', value: structure['Str_Unique_ID'] || structure['Str Unique ID'] || structure['id'] },
     { label: 'Road Name', value: roadName },
-    { label: 'Structure_Type', value: strType },
+    { label: 'Structure Type', value: strType },
     { label: 'Chainage', value: structure['Chainage'] },
     { label: 'LatLong', value: structure['LatLong'] || structure['Lat Long'] || structure['Coordinates'] },
     { label: 'Visited ?', value: structure['Visited ?'] || structure['Visited'] },
@@ -188,9 +188,9 @@ const StructureDetailsView = ({ structure, roadName, onBack }: { structure: any,
   ];
 
   const lastSegment = [
-    { label: 'Bridge Configuration (Span details, Type of Super Structure, Type of Sub Structure, High Level/ Low Level, etc)', value: structure[findKey('Bridge Configuration (Span details, Type of Super Structure, Type of Sub Structure, High Level/ Low Level, etc)')] || structure['Bridge Configuration'] },
-    { label: 'Defect Details (In Short) If Any', value: structure[findKey('Defect Details (In Short) If Any')] || structure['Defect Details'] },
-    { label: 'Action Taken Report ( કરેલ કામગીરીની વિગતો)', value: structure[findKey('In Case Critical or Poor Bridge, Action Taken Report ( કરેલ કામગીરીની વિગતો)')] || structure['Action Taken Report'] }
+    { label: 'Bridge Configuration', value: structure[findKey('Bridge Configuration (Span details, Type of Super Structure, Type of Sub Structure, High Level/ Low Level, etc)')] || structure['Bridge Configuration'] },
+    { label: 'Defect Details', value: structure[findKey('Defect Details (In Short) If Any')] || structure['Defect Details'] },
+    { label: 'Action Taken Report', value: structure[findKey('In Case Critical or Poor Bridge, Action Taken Report ( કરેલ કામગીરીની વિગતો)')] || structure['Action Taken Report'] }
   ];
 
   const Section = ({ title, data }: { title: string, data: any[] }) => {
@@ -733,30 +733,57 @@ export const RoadsDashboard: React.FC<RoadsDashboardProps> = ({ data, structureD
               <div className="flex flex-wrap gap-2 sm:gap-3 text-xs font-medium">
                 {activeDetailView === 'structures' ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {Object.entries(structureCategoryCounts).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([cat, count]) => (
-                      <button
-                        key={cat}
-                        onClick={() => setStructureCategoryFilter(cat)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg border transition-all font-bold",
-                          structureCategoryFilter === cat 
-                            ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
-                            : "bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100"
-                        )}
-                      >
-                        {cat} : {count}
-                      </button>
-                    ))}
+                    {Object.entries(structureCategoryCounts).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([cat, count]) => {
+                      const getIcon = (category: string) => {
+                        const c = category.toLowerCase();
+                        if (c.includes('major')) return <span className="mr-1.5 text-base leading-none">🌉</span>;
+                        if (c.includes('minor')) return <span className="mr-1.5 text-[10px] font-black tracking-tighter leading-none">▄▄▄</span>;
+                        if (c.includes('slab')) return <span className="mr-1.5 text-base leading-none">⩎</span>;
+                        if (c.includes('pipe')) return <span className="mr-1.5 text-base leading-none">🔘</span>;
+                        if (c.includes('box')) return <span className="mr-1.5 text-base leading-none">🔳</span>;
+                        if (c.includes('cause')) return <Waves size={14} className="mr-1.5" />;
+                        return <Activity size={14} className="mr-1.5" />;
+                      };
+
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setStructureCategoryFilter(cat)}
+                          className={cn(
+                            "flex items-center px-3 py-2 rounded-xl border transition-all duration-200 font-bold",
+                            structureCategoryFilter === cat 
+                              ? "bg-purple-600 text-white border-purple-600 shadow-md transform scale-105" 
+                              : "bg-white text-purple-700 border-purple-100 hover:border-purple-300 hover:bg-purple-50 shadow-sm"
+                          )}
+                        >
+                          {getIcon(cat)}
+                          <span>{cat}</span>
+                          <span className={cn(
+                            "ml-2 px-1.5 py-0.5 rounded-md text-[10px]",
+                            structureCategoryFilter === cat ? "bg-purple-500 text-white" : "bg-purple-100 text-purple-800"
+                          )}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
                     <button
                       onClick={() => setStructureCategoryFilter('All')}
                       className={cn(
-                        "px-3 py-1.5 rounded-lg border transition-all font-bold",
+                        "flex items-center px-4 py-2 rounded-xl border transition-all duration-200 font-bold",
                         structureCategoryFilter === 'All' 
-                          ? "bg-slate-700 text-white border-slate-700 shadow-sm" 
-                          : "bg-slate-50 text-slate-700 border-slate-100 hover:bg-slate-100"
+                          ? "bg-slate-800 text-white border-slate-800 shadow-md transform scale-105" 
+                          : "bg-white text-slate-700 border-slate-200 hover:border-slate-400 hover:bg-slate-50 shadow-sm"
                       )}
                     >
-                      Total Structure : {totalStructuresCount}
+                      <Layers size={14} className="mr-2" />
+                      <span>Total Structure</span>
+                      <span className={cn(
+                        "ml-2 px-2 py-0.5 rounded-md text-[10px]",
+                        structureCategoryFilter === 'All' ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-800"
+                      )}>
+                        {totalStructuresCount}
+                      </span>
                     </button>
                   </div>
                 ) : (
